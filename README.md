@@ -114,7 +114,7 @@ On Docker Desktop, raise the limits under *Settings → Resources*.
 ### 3. Get the code
 
 ```bash
-git clone <this-repo-url> hcp-kind-lab
+git clone https://github.com/mcipamo/hcp-kind-lab.git
 cd hcp-kind-lab
 ```
 

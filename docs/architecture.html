@@ -333,7 +333,9 @@ footer { color: var(--muted); font-size: 0.85rem; }
     <h2>Up and running in about 5 minutes</h2>
     <p>You need podman (or docker) with a 6 CPU, 10–12 GB VM, kind 0.33 or later, helm and python3. The lab downloads its own kubectl and uses its own kubeconfigs, so it never touches <code>~/.kube/config</code>.</p>
   </div>
-  <pre><span class="c"># once, if the VM is too small</span>
+  <pre>git clone https://github.com/mcipamo/hcp-kind-lab.git && cd hcp-kind-lab
+
+<span class="c"># once, if the VM is too small</span>
 podman machine stop && podman machine set --cpus 6 --memory 12288 && podman machine start
 
 ./scripts/01-mgmt-cluster.sh               <span class="c"># management cluster</span>
@@ -396,6 +398,6 @@ hkubectl tenant-a get nodes                <span class="c"># inside the hosted c
   </div>
 </section>
 
-<footer>Kubernetes v1.35 / v1.36 · kind v0.33 · Kamaji (edge) · podman 5.4 on Apple Silicon. October 2026.</footer>
+<footer>Scripts, README and the <code>oc</code> guide: <a href="https://github.com/mcipamo/hcp-kind-lab">github.com/mcipamo/hcp-kind-lab</a><br>Kubernetes v1.35 / v1.36 · kind v0.33 · Kamaji (edge) · podman 5.4 on Apple Silicon. October 2026.</footer>
 
 </div>
