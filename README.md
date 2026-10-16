@@ -6,6 +6,8 @@ see, break and fix it before you meet it in production.
 Built with `kind`, podman/docker and [Kamaji](https://github.com/clastix/kamaji). Two hosted
 clusters with their own control planes and workers come up in about 5 minutes and use ~3.3 GB of RAM.
 
+**→ [Architecture page](https://mcipamo.github.io/hcp-kind-lab/)**
+
 ---
 
 ## What it does
@@ -47,7 +49,7 @@ through a published endpoint. This lab builds that same topology from upstream p
 └───────────────────────────────────────┘               └────────────────────────────────────┘
 ```
 
-For a visual version, open [`docs/architecture.html`](docs/architecture.html) in a browser.
+**Visual version: https://mcipamo.github.io/hcp-kind-lab/** (architecture diagram, mapping, upgrades and exercises).
 
 ### How it maps to OpenShift HCP
 
@@ -309,7 +311,8 @@ scripts/03-hosted-cluster.sh hosted cluster (etcd + TenantControlPlane + Service
 scripts/04-nodepool.sh       NodePool scale / upgrade
 scripts/etcdctl.sh           etcdctl as root against a tenant's etcd
 scripts/05-delete-hosted-cluster.sh, 99-destroy.sh, status.sh
-docs/architecture.html       visual architecture page
+docs/index.html              architecture page served by GitHub Pages
+docs/architecture.html       same page, source for the claude.ai artifact
 docs/oc-guide.md             tested oc command reference for both planes
 manifests/oc-compat.yaml     PriorityClass so `oc debug node` works on vanilla Kubernetes
 kubeconfig/                  (generated, git-ignored) mgmt + one per hosted cluster
