@@ -20,8 +20,8 @@ internal_kc="$LAB_ROOT/kubeconfig/$name-internal.kubeconfig"
 pool="$name-workers"
 hk() { kubectl --kubeconfig "$LAB_ROOT/kubeconfig/$name.kubeconfig" "$@"; }
 
-workers() { $ENGINE ps -a --filter "label=lab.hcp/nodepool=$pool" --format '{{.Names}}' | sort -t- -k3 -n; }
-worker_version() { $ENGINE inspect "$1" --format '{{index .Config.Labels "lab.hcp/version"}}'; }
+workers() { engine ps -a --filter "label=lab.hcp/nodepool=$pool" --format '{{.Names}}' | sort -t- -k3 -n; }
+worker_version() { engine inspect "$1" --format '{{index .Config.Labels "lab.hcp/version"}}'; }
 
 if [ -z "$version" ]; then
   first=$(workers | head -1)
@@ -40,7 +40,7 @@ create_worker() {
   log "Creating $node ($version)"
   local engine_args=(--volume "$node-var:/var")
   [ "$ENGINE" = podman ] && engine_args=(--volume "$node-var:/var:suid,exec,dev" --volume /dev/mapper:/dev/mapper)
-  $ENGINE run --name "$node" --hostname "$node" \
+  engine run --name "$node" --hostname "$node" \
     --label "lab.hcp/nodepool=$pool" --label "lab.hcp/hosted-cluster=$name" \
     --label "lab.hcp/version=$version" \
     --privileged --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
@@ -50,17 +50,17 @@ create_worker() {
 
   # Wait for systemd (and containerd) to come up inside the container
   for i in $(seq 1 30); do
-    $ENGINE exec "$node" systemctl is-active -q containerd 2>/dev/null && break
+    engine exec "$node" systemctl is-active -q containerd 2>/dev/null && break
     sleep 2
   done
 
   # Bootstrap: what ignition does for a NodePool, done here with kubeadm join and a short-lived token
-  $ENGINE cp "$internal_kc" "$node:/root/admin.conf"
+  engine cp "$internal_kc" "$node:/root/admin.conf"
   local join
-  join=$($ENGINE exec "$node" kubeadm token create --print-join-command --ttl 15m --kubeconfig /root/admin.conf)
-  $ENGINE exec "$node" rm -f /root/admin.conf
+  join=$(engine exec "$node" kubeadm token create --print-join-command --ttl 15m --kubeconfig /root/admin.conf)
+  engine exec "$node" rm -f /root/admin.conf
   log "kubeadm join against $(echo "$join" | awk '{print $3}')"
-  $ENGINE exec "$node" $join --ignore-preflight-errors=all >/dev/null 2>&1
+  engine exec "$node" $join --ignore-preflight-errors=all >/dev/null 2>&1
 
   for i in $(seq 1 30); do hk get node "$node" >/dev/null 2>&1 && break; sleep 2; done
   hk label node "$node" --overwrite \
@@ -73,8 +73,8 @@ delete_worker() {
   log "Removing $node (drain + delete)"
   hk drain "$node" --ignore-daemonsets --delete-emptydir-data --timeout 90s >/dev/null 2>&1 || true
   hk delete node "$node" --ignore-not-found >/dev/null
-  $ENGINE rm -f "$node" >/dev/null
-  $ENGINE volume rm -f "$node-var" >/dev/null 2>&1 || true
+  engine rm -f "$node" >/dev/null 2>&1
+  engine volume rm -f "$node-var" >/dev/null 2>&1 || true
 }
 
 current=$(workers)
@@ -93,7 +93,7 @@ done
 # 2) Scale up
 for ((i=1; i<=replicas; i++)); do
   node="$name-worker-$i"
-  $ENGINE container inspect "$node" >/dev/null 2>&1 || create_worker "$node"
+  engine container inspect "$node" >/dev/null 2>&1 || create_worker "$node"
 done
 
 # 3) Scale down

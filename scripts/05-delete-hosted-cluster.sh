@@ -6,10 +6,10 @@ source "$(dirname "$0")/common.sh"
 name="${1:-}"; [ -n "$name" ] || die "Usage: $0 <name>"
 ns="clusters-$name"
 
-for node in $($ENGINE ps -a --filter "label=lab.hcp/hosted-cluster=$name" --format '{{.Names}}'); do
+for node in $(engine ps -a --filter "label=lab.hcp/hosted-cluster=$name" --format '{{.Names}}'); do
   log "Removing worker $node"
-  $ENGINE rm -f "$node" >/dev/null
-  $ENGINE volume rm -f "$node-var" >/dev/null 2>&1 || true
+  engine rm -f "$node" >/dev/null 2>&1
+  engine volume rm -f "$node-var" >/dev/null 2>&1 || true
 done
 
 log "Deleting TenantControlPlane and etcd for $name"

@@ -19,6 +19,26 @@ fi
 export ENGINE
 [ "$ENGINE" = podman ] && export KIND_EXPERIMENTAL_PROVIDER=podman
 
+# kind needs ROOTFUL podman (kubelets run inside the node containers). On macOS/Windows the
+# podman machine is already rootful; on Linux (Fedora, CentOS, RHEL...) podman defaults to
+# rootless, so the lab runs podman and kind through sudo. Docker users in the docker group
+# need no sudo.
+LAB_SUDO=""
+if [ "$(uname -s)" = Linux ] && [ "$ENGINE" = podman ] && [ "$(id -u)" != 0 ]; then
+  LAB_SUDO=sudo
+fi
+export LAB_SUDO
+
+# Use these instead of calling podman/docker/kind directly.  e.g. engine ps
+engine() { $LAB_SUDO "$ENGINE" "$@"; }
+lab_kind() {
+  if [ -n "$LAB_SUDO" ]; then
+    sudo env KIND_EXPERIMENTAL_PROVIDER="${KIND_EXPERIMENTAL_PROVIDER:-}" "$(command -v kind)" "$@"
+  else
+    kind "$@"
+  fi
+}
+
 export PATH="$LAB_ROOT/bin:$PATH"
 
 # The management cluster (where the HyperShift operator would run).

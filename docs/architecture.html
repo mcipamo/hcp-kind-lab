@@ -331,11 +331,13 @@ footer { color: var(--muted); font-size: 0.85rem; }
   <div class="prose" style="display:grid;gap:12px">
     <span class="eyebrow">Get started</span>
     <h2>Up and running in about 5 minutes</h2>
-    <p>You need podman (or docker) with a 6 CPU, 10–12 GB VM, kind 0.33 or later, helm and python3. The lab downloads its own kubectl and uses its own kubeconfigs, so it never touches <code>~/.kube/config</code>.</p>
+    <p>Runs on macOS (podman machine) and on Fedora, CentOS Stream or RHEL hosts with 6 CPUs and 10–12 GB of RAM. The scripts download kind, helm and kubectl into the repo and use their own kubeconfigs, so they never touch <code>~/.kube/config</code>.</p>
   </div>
   <pre>git clone https://github.com/mcipamo/hcp-kind-lab.git && cd hcp-kind-lab
 
-<span class="c"># once, if the VM is too small</span>
+<span class="c"># Linux (Fedora / CentOS Stream / RHEL), once:</span>
+./scripts/00-linux-host-prep.sh
+<span class="c"># macOS, once, if the podman VM is too small:</span>
 podman machine stop && podman machine set --cpus 6 --memory 12288 && podman machine start
 
 ./scripts/01-mgmt-cluster.sh               <span class="c"># management cluster</span>
@@ -346,7 +348,10 @@ podman machine stop && podman machine set --cpus 6 --memory 12288 && podman mach
 
 source env.sh
 kubectl get tcp -A                         <span class="c"># control planes, seen from the management cluster</span>
-hkubectl tenant-a get nodes                <span class="c"># inside the hosted cluster</span></pre>
+hkubectl tenant-a get nodes                <span class="c"># inside the hosted cluster</span>
+
+./scripts/stop.sh                          <span class="c"># pause for the day</span>
+./scripts/start.sh                         <span class="c"># resume, ~3 minutes</span></pre>
 </section>
 
 <section>

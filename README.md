@@ -77,7 +77,7 @@ through a published endpoint. This lab builds that same topology from upstream p
   Here you own both sides, so you can follow a request from a worker to its control plane.
 - **Break things safely.** Kill an API server, lose a management node, delete the konnectivity
   agent. Nothing here is anyone's production.
-- **Cheap and fast.** It runs on a laptop with no cloud account and no pull secret. It is up in
+- **Cheap and fast.** It runs on a laptop or a Fedora/CentOS box, with no cloud account and no pull secret. It is up in
   ~5 minutes and gone in seconds.
 - **Small enough to read.** Each step is a short, commented bash script. The scripts *are* the
   documentation of how a hosted control plane gets wired.
@@ -90,37 +90,70 @@ through a published endpoint. This lab builds that same topology from upstream p
 
 ## Installation
 
-### 1. Prerequisites
+### Tested on
 
-| Tool | Version | macOS (Homebrew) | Linux |
-|---|---|---|---|
-| podman (tested) **or** docker | podman 5.x / docker 24+ | `brew install podman` | distro package |
-| kind | ≥ 0.33 | `brew install kind` | [kind releases](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) |
-| helm | 3.x | `brew install helm` | [helm install](https://helm.sh/docs/intro/install/) |
-| python3, curl | any | preinstalled | distro package |
+| Host | Container engine | Notes |
+|---|---|---|
+| macOS 26, Apple Silicon | podman 5.4 (podman machine) | rootful machine, 6 CPU / 12 GB |
+| Fedora 44 (aarch64) | podman 5.8 | SELinux enforcing, firewalld untouched |
+| CentOS Stream 9 (aarch64) | podman 5.8 | SELinux enforcing, kernel 5.14 |
 
-`kubectl` is downloaded automatically into `bin/` on first run.
+x86_64 hosts use the same scripts; they download the matching binaries automatically. Docker
+should work but has not been tested. Other RHEL-family hosts (RHEL 9/10, Rocky, Alma, CentOS
+Stream 10) are covered by the Linux prep script but not tested.
 
-### 2. Give the container VM enough resources
+### Linux: Fedora / CentOS Stream / RHEL
 
-You need **6 CPUs and 10–12 GB of RAM** for the VM. With podman on macOS:
+You need a host or VM with **6 CPUs and 10–12 GB of RAM**, cgroup v2 (the default since
+Fedora 31 and CentOS Stream / RHEL 9), and a user with `sudo`.
 
 ```bash
-podman machine init --cpus 6 --memory 12288 --rootful   # new machine
-# or, for an existing one:
-podman machine stop && podman machine set --cpus 6 --memory 12288 && podman machine start
+sudo dnf install -y git
+git clone https://github.com/mcipamo/hcp-kind-lab.git
+cd hcp-kind-lab
+./scripts/00-linux-host-prep.sh
 ```
 
-On Docker Desktop, raise the limits under *Settings → Resources*.
+`00-linux-host-prep.sh` runs once and asks for `sudo`. It:
+- installs `podman`, `python3`, `curl` and `tar` with `dnf` when they are missing
+- checks cgroup v2, CPUs and RAM
+- persists the kernel settings the lab needs in `/etc/sysctl.d/99-hcp-kind-lab.conf`:
+  higher inotify limits (several kubelets on one host) and `nf_conntrack_max`
+- downloads `kind`, `helm` and `kubectl` into `bin/`
 
-### 3. Get the code
+It leaves SELinux and firewalld as they are.
+
+**About sudo:** kind needs *rootful* podman, and podman on Linux is rootless by default. The scripts
+run podman and kind through `sudo` for you, and give the generated kubeconfigs back to your user.
+`kubectl`, `oc` and `helm` run as your user. To see the lab's containers, use `sudo podman ps`, or
+`engine ps` after `source env.sh`. To avoid password prompts in the middle of a step, run `sudo -v`
+first.
+
+**Bonus on Linux:** the hosted clusters' LoadBalancer IPs (`10.89.0.200`, `.201`, …) are directly
+reachable from the host, just like an NLB would be from inside the VPC.
+
+**Installing `oc` on Linux** (optional, `kubectl` is already in `bin/`):
 
 ```bash
+curl -fsSL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz \
+  | tar -xz -C bin oc
+```
+
+### macOS
+
+```bash
+brew install podman              # kind, helm and kubectl are downloaded into bin/ by the scripts
+podman machine init --cpus 6 --memory 12288 --rootful
+podman machine start
 git clone https://github.com/mcipamo/hcp-kind-lab.git
 cd hcp-kind-lab
 ```
 
-Tested on macOS (Apple Silicon) with podman 5.4 and kind 0.33. Docker and Linux should work but are untested.
+For an existing machine, run `podman machine stop && podman machine set --cpus 6 --memory 12288 && podman machine start`.
+On Docker Desktop, raise the limits under *Settings → Resources*.
+
+Every script and file the lab creates stays inside the repo folder: kubeconfigs in `kubeconfig/` and
+tools in `bin/`. **Your `~/.kube/config` is never touched.**
 
 ---
 
@@ -129,6 +162,7 @@ Tested on macOS (Apple Silicon) with podman 5.4 and kind 0.33. Docker and Linux 
 ### Bring the lab up
 
 ```bash
+./scripts/00-linux-host-prep.sh            # Linux only, once
 ./scripts/01-mgmt-cluster.sh               # management cluster (1 control-plane + 2 nodes for hosted control planes)
 ./scripts/02-addons.sh                     # cert-manager, MetalLB, Kamaji
 ./scripts/03-hosted-cluster.sh tenant-a 1  # hosted cluster in slot 1 → API on 127.0.0.1:31441
@@ -139,6 +173,10 @@ Tested on macOS (Apple Silicon) with podman 5.4 and kind 0.33. Docker and Linux 
 ```
 
 You can run up to 3 hosted clusters, in slots 1–3, which map to ports 31441–31443 on your machine.
+
+To stop for the day, run `./scripts/stop.sh` (and `podman machine stop` on macOS). Next time,
+start the VM again on macOS and run `./scripts/start.sh`. Everything comes back as you left it in
+about 3 minutes, including after a podman VM restart.
 
 ### Connect
 
@@ -185,6 +223,8 @@ Run `unset KUBECONFIG` or open a new terminal before going back to real clusters
 | Upgrade the control plane | `kubectl -n clusters-<name> patch tcp <name> --type merge -p '{"spec":{"kubernetes":{"version":"v1.36.4"}}}'` |
 | Upgrade a NodePool | `./scripts/04-nodepool.sh <name> <replicas> v1.36.4` |
 | Delete a hosted cluster | `./scripts/05-delete-hosted-cluster.sh <name>` |
+| Pause the whole lab (keeps state) | `./scripts/stop.sh` |
+| Resume it (also after a podman VM restart) | `./scripts/start.sh` (about 3 minutes) |
 | Delete the whole lab | `./scripts/99-destroy.sh` |
 | Show everything | `./scripts/status.sh` |
 | Query a tenant's etcd | `./scripts/etcdctl.sh <name> get / --prefix --keys-only --limit 20` |
@@ -225,6 +265,8 @@ From the **container engine**:
 ---
 
 ## What you can do: exercises
+
+On Linux, write `sudo podman` (or `engine` after `source env.sh`) wherever an exercise says `podman`.
 
 1. **Anatomy of a hosted control plane.** Map every pod, Service and Secret in
    `clusters-tenant-a` to its role. Find the admin kubeconfig and decode it.
@@ -292,9 +334,11 @@ MIT. See [LICENSE](LICENSE).
 
 | Symptom | Cause | How the lab handles it |
 |---|---|---|
-| kube-proxy: `open /proc/sys/net/netfilter/nf_conntrack_max: permission denied` | kube-proxy rewrites the value whenever it differs from `32768 × CPUs`, and it is not allowed to inside a container | `01-mgmt-cluster.sh` sets exactly that value on the container host. The setting does not survive a VM restart: re-run `01-mgmt-cluster.sh` (it is idempotent) after restarting podman/docker or changing CPUs |
+| kube-proxy: `open /proc/sys/net/netfilter/nf_conntrack_max: permission denied` | kube-proxy rewrites the value whenever it differs from `32768 × CPUs`, and it is not allowed to inside a container | `01-mgmt-cluster.sh` sets exactly that value on the container host. On macOS it does not survive a VM restart: re-run `01-mgmt-cluster.sh` (it is idempotent). On Linux, `00-linux-host-prep.sh` persists it; re-run it if you change the CPU count |
 | Pods stuck in `ContainerCreating`, `failed to find plugin "bridge"` | flannel delegates to the `bridge` CNI plugin, which kindest/node images do not ship | The lab uses kindnet (`manifests/kindnet.yaml`, taken from the kindest/node image) |
 | `logs`/`exec`: `No agent available` | konnectivity-agent is not running, usually because pod networking is broken | Debug from the node: `podman exec <worker> crictl ps -a` / `crictl logs <id>` |
+| Pods crash with `too many open files` (Linux) | Low inotify limits for several kubelets on one host | `00-linux-host-prep.sh` raises `fs.inotify.max_user_watches` / `max_user_instances` |
+| `kind` fails with cgroup or permission errors (Linux) | Rootless podman | The scripts use `sudo` automatically. Do not run them against rootless podman |
 | podman: `loading registries configuration ... toml` | Malformed `~/.config/containers/registries.conf` (podman parses it on every `run`) | Fix the TOML: every entry needs its own `[[registry]]` header |
 
 ---
@@ -305,16 +349,18 @@ MIT. See [LICENSE](LICENSE).
 env.sh                       lab variables, node_image_for(), hkubectl()
 config/kind-mgmt.yaml        management cluster topology
 manifests/kindnet.yaml       CNI for the hosted clusters
-scripts/01-mgmt-cluster.sh   management cluster + kubectl download + host conntrack fix
+scripts/00-linux-host-prep.sh  Linux only: packages, kernel settings, tools (run once)
+scripts/01-mgmt-cluster.sh   management cluster + tool download + host conntrack fix
 scripts/02-addons.sh         cert-manager, MetalLB, Kamaji, metrics-server
 scripts/03-hosted-cluster.sh hosted cluster (etcd + TenantControlPlane + Services + kubeconfigs + CNI)
 scripts/04-nodepool.sh       NodePool scale / upgrade
 scripts/etcdctl.sh           etcdctl as root against a tenant's etcd
+scripts/stop.sh, start.sh     pause / resume the whole lab
 scripts/05-delete-hosted-cluster.sh, 99-destroy.sh, status.sh
 docs/index.html              architecture page served by GitHub Pages
 docs/architecture.html       same page, source for the claude.ai artifact
 docs/oc-guide.md             tested oc command reference for both planes
 manifests/oc-compat.yaml     PriorityClass so `oc debug node` works on vanilla Kubernetes
 kubeconfig/                  (generated, git-ignored) mgmt + one per hosted cluster
-bin/kubectl                  (downloaded, git-ignored)
+bin/                         (downloaded, git-ignored) kind, helm, kubectl
 ```

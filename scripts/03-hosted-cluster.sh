@@ -105,6 +105,15 @@ kubectl get secret "$secret" -n "$ns" -o jsonpath='{.data.admin\.conf}' | base64
 sed -E "s#server: https://[^ ]+#server: https://127.0.0.1:$local_port#" \
   "$LAB_ROOT/kubeconfig/$name-internal.kubeconfig" > "$LAB_ROOT/kubeconfig/$name.kubeconfig"
 
+# The NodePort answers once kube-proxy has programmed it (can take a few seconds)
+log "Waiting for the hosted API on 127.0.0.1:$local_port"
+for i in $(seq 1 60); do
+  kubectl --kubeconfig "$LAB_ROOT/kubeconfig/$name.kubeconfig" get --raw /readyz >/dev/null 2>&1 && break
+  sleep 2
+done
+kubectl --kubeconfig "$LAB_ROOT/kubeconfig/$name.kubeconfig" get --raw /readyz >/dev/null \
+  || die "Hosted API not reachable on 127.0.0.1:$local_port"
+
 # kindnet is the CNI that ships with kindest/node images. flannel does not work here: it
 # delegates to the "bridge" CNI plugin, which these images do not include.
 log "CNI (kindnet) inside the hosted cluster"

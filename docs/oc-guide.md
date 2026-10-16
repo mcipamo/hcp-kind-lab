@@ -22,6 +22,8 @@ not needed (and does not apply).
 
 Tip: keep one terminal on each side. Break something on one, watch the other.
 
+On Linux, `podman` commands in this guide need `sudo` (the lab runs rootful podman).
+
 ---
 
 ## Control plane side: the management cluster
