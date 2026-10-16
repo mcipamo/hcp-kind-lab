@@ -111,6 +111,9 @@ log "CNI (kindnet) inside the hosted cluster"
 kubectl --kubeconfig "$LAB_ROOT/kubeconfig/$name.kubeconfig" apply \
   -f "$LAB_ROOT/manifests/kindnet.yaml" >/dev/null
 
+log "metrics-server and oc compatibility (oc adm top, oc debug node)"
+install_cluster_extras "$LAB_ROOT/kubeconfig/$name.kubeconfig"
+
 echo
 kubectl -n "$ns" get pods,svc
 echo

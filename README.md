@@ -79,7 +79,8 @@ For a visual version, open [`docs/architecture.html`](docs/architecture.html) in
   ~5 minutes and gone in seconds.
 - **Small enough to read.** Each step is a short, commented bash script. The scripts *are* the
   documentation of how a hosted control plane gets wired.
-- **Uses the tools you already have.** Both `kubectl` and `oc` work against every cluster in the lab.
+- **Uses the tools you already have.** Both `kubectl` and `oc` work against every cluster in the lab, including
+  `oc adm top`, `oc debug node` and `oc rsh` (see the [`oc` guide](docs/oc-guide.md)).
 - **Safe for your real environment.** The lab uses its own kubeconfigs and its own kubectl. It never
   touches `~/.kube/config`.
 
@@ -162,11 +163,11 @@ kubectl get nodes
 hkubectl tenant-a get nodes
 ```
 
-**`oc` works too.** The standard verbs work: `get`, `describe`, `logs`, `exec`, `rsh`, `debug`,
-`apply`, `scale`, `rollout`, `port-forward`, `oc project`, `oc adm drain`. OpenShift-only APIs do
-not, because these are vanilla Kubernetes clusters. That rules out Routes, `new-project`,
-`new-app`, builds, ImageStreams, `oc get co`, `oc adm upgrade` and `oc login`. You are already
-authenticated through the kubeconfig's client certificate.
+**`oc` works too**, on both sides. You can look at nodes, pods and logs, and use `exec`, `rsh`,
+`debug node`, `adm top`, `adm drain`, `port-forward` and more. OpenShift-only APIs such as Routes,
+`new-project`, builds, `oc get co` and `oc login` do not exist on vanilla Kubernetes.
+**See the [`oc` guide](docs/oc-guide.md)** for a tested command reference for the control plane
+side and the data plane side, and for what to use when an OpenShift-only command doesn't apply.
 
 Tip: keep two terminals open, one on the management cluster and one on a hosted cluster.
 Break something on one side and watch the other.
@@ -184,6 +185,7 @@ Run `unset KUBECONFIG` or open a new terminal before going back to real clusters
 | Delete a hosted cluster | `./scripts/05-delete-hosted-cluster.sh <name>` |
 | Delete the whole lab | `./scripts/99-destroy.sh` |
 | Show everything | `./scripts/status.sh` |
+| Query a tenant's etcd | `./scripts/etcdctl.sh <name> get / --prefix --keys-only --limit 20` |
 
 The available Kubernetes versions are v1.34.11, v1.35.8 and v1.36.4 (see `node_image_for` in `env.sh`).
 
@@ -239,7 +241,8 @@ From the **container engine**:
 7. **Scale the NodePool** up to 3 and back to 1, and watch the drain happen.
 8. **Lose a management cluster node.** Run `podman stop hcp-mgmt-worker2`. Which control planes go down?
    Do they reschedule? What happens to an etcd on a local PVC? Bring it back with `podman start`.
-9. **Isolation between tenants.** Compare the CAs and etcds of `tenant-a` and `tenant-b`. What
+9. **Isolation between tenants.** Compare the CAs and etcds of `tenant-a` and `tenant-b`.
+   `./scripts/etcdctl.sh tenant-a user list` shows etcd RBAC with one user per tenant. What
    would they share with a common DataStore?
 10. **Debug without the API.** With konnectivity broken, find out why a pod fails using only
     `podman exec <worker> crictl ...` and `journalctl`.
@@ -277,6 +280,12 @@ Keep these in mind so you don't learn the wrong thing:
 
 ---
 
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+---
+
 ## Known issues (and why)
 
 | Symptom | Cause | How the lab handles it |
@@ -295,11 +304,14 @@ env.sh                       lab variables, node_image_for(), hkubectl()
 config/kind-mgmt.yaml        management cluster topology
 manifests/kindnet.yaml       CNI for the hosted clusters
 scripts/01-mgmt-cluster.sh   management cluster + kubectl download + host conntrack fix
-scripts/02-addons.sh         cert-manager, MetalLB, Kamaji
+scripts/02-addons.sh         cert-manager, MetalLB, Kamaji, metrics-server
 scripts/03-hosted-cluster.sh hosted cluster (etcd + TenantControlPlane + Services + kubeconfigs + CNI)
 scripts/04-nodepool.sh       NodePool scale / upgrade
+scripts/etcdctl.sh           etcdctl as root against a tenant's etcd
 scripts/05-delete-hosted-cluster.sh, 99-destroy.sh, status.sh
 docs/architecture.html       visual architecture page
+docs/oc-guide.md             tested oc command reference for both planes
+manifests/oc-compat.yaml     PriorityClass so `oc debug node` works on vanilla Kubernetes
 kubeconfig/                  (generated, git-ignored) mgmt + one per hosted cluster
 bin/kubectl                  (downloaded, git-ignored)
 ```

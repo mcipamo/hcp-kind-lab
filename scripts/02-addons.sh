@@ -41,4 +41,7 @@ helm upgrade --install kamaji clastix/kamaji -n kamaji-system --create-namespace
   --set telemetry.disabled=true \
   --wait --timeout 10m >/dev/null
 
+log "metrics-server and oc compatibility (oc adm top, oc debug node)"
+install_cluster_extras "$KUBECONFIG"
+
 kubectl get pods -n kamaji-system

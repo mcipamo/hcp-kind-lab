@@ -1,0 +1,9 @@
+# Makes `oc debug node/<name>` work on a vanilla Kubernetes cluster: oc sets this
+# OpenShift PriorityClass on its debug pods, and the pod is rejected if it does not exist.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: openshift-user-critical
+value: 1000000000
+globalDefault: false
+description: "Compatibility shim for oc debug node"

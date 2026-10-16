@@ -15,3 +15,18 @@ kind_ipv4_subnet() {
     $ENGINE network inspect kind --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}'
   fi | tr ' ' '\n' | grep -m1 '\.'
 }
+
+# Extras so day-to-day oc/kubectl commands work on any lab cluster:
+#   - metrics-server       -> `oc adm top nodes|pods`
+#   - oc-compat.yaml       -> `oc debug node/<name>` (needs an OpenShift PriorityClass)
+install_cluster_extras() {
+  local kc="$1"
+  kubectl --kubeconfig "$kc" apply -f "$LAB_ROOT/manifests/oc-compat.yaml" >/dev/null
+  kubectl --kubeconfig "$kc" apply \
+    -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.0/components.yaml >/dev/null
+  # kind kubelets use self-signed serving certs
+  if ! kubectl --kubeconfig "$kc" -n kube-system get deploy metrics-server -o jsonpath='{.spec.template.spec.containers[0].args}' | grep -q kubelet-insecure-tls; then
+    kubectl --kubeconfig "$kc" -n kube-system patch deploy metrics-server --type json \
+      -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]' >/dev/null
+  fi
+}
