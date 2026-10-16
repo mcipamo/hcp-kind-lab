@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Run the OpenShift Hosted Control Planes (HyperShift) architecture on a laptop with kind, podman and Kamaji.">
+<!-- GitHub Pages entry point. Same content as architecture.html, plus the document head
+     and base reset that the claude.ai artifact viewer normally adds. Keep both in sync. -->
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+<title>HCP on kind</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@500;700;800&family=Red+Hat+Text:wght@400;500;600&family=Red+Hat+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (~68ch) with diagrams that open up to 1000px; two semantic
+   inks: amber = management / control plane side, teal = data plane. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --fg: #16202a;
+  --muted: #586473;
+  --line: #d3d9e0;
+  --cp: #a8580f;        /* management / control plane */
+  --cp-soft: #f6eadd;
+  --dp: #0b7671;        /* data plane */
+  --dp-soft: #dff1ef;
+  --code-bg: #eceff3;
+  --display: "Red Hat Display", "Helvetica Neue", Arial, sans-serif;
+  --text: "Red Hat Text", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Red Hat Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319; --surface: #151c24; --fg: #e5e9ef; --muted: #95a2b2; --line: #2a3541;
+    --cp: #e59a52; --cp-soft: #2f2418; --dp: #41c0b6; --dp-soft: #13302e; --code-bg: #1b232d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151c24; --fg: #e5e9ef; --muted: #95a2b2; --line: #2a3541;
+  --cp: #e59a52; --cp-soft: #2f2418; --dp: #41c0b6; --dp-soft: #13302e; --code-bg: #1b232d;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.6 var(--text);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+.wrap { max-width: 1000px; margin: 0 auto; display: grid; gap: 56px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5vw, 3.2rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.6rem; font-weight: 700; }
+h3 { font-size: 1.05rem; font-weight: 700; }
+p { margin: 0; }
+section { display: grid; gap: 18px; min-width: 0; }
+.eyebrow {
+  font: 600 0.75rem/1 var(--mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
+}
+code, pre { font-family: var(--mono); font-size: 0.88em; }
+:not(pre) > code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+pre {
+  background: var(--code-bg); border-radius: 8px; padding: 14px 16px; margin: 0;
+  overflow-x: auto; line-height: 1.55;
+}
+pre .c { color: var(--muted); }
+a { color: var(--dp); }
+
+header.hero { padding-top: 48px; display: grid; gap: 16px; }
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 62ch; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 28px; font: 500 0.9rem/1.4 var(--mono); color: var(--muted); }
+.facts b { color: var(--fg); font-weight: 500; }
+
+.key { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.9rem; color: var(--muted); }
+.key span::before {
+  content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+  margin-right: 8px; vertical-align: -1px; border: 1.5px solid currentColor;
+}
+.key .k-cp { color: var(--cp); } .key .k-dp { color: var(--dp); }
+.key .k-cp::before { background: var(--cp-soft); } .key .k-dp::before { background: var(--dp-soft); }
+
+figure { margin: 0; display: grid; gap: 12px; min-width: 0; }
+.diagram { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.diagram svg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--fg); }
+figcaption { font-size: 0.92rem; color: var(--muted); max-width: 75ch; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 0.93rem; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 0.72rem/1.2 var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { width: 46%; }
+
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.step {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+  display: grid; gap: 10px; align-content: start; min-width: 0;
+}
+.step .cmd { font: 0.8rem/1.45 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.ver { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font: 0.88rem/1.4 var(--mono); }
+.ver dt { color: var(--muted); }
+.ver dd { margin: 0; font-variant-numeric: tabular-nums; }
+.ver .cpv { color: var(--cp); font-weight: 500; }
+.ver .dpv { color: var(--dp); font-weight: 500; }
+.step.blocked { border-style: dashed; }
+.step.blocked h3 { color: var(--muted); }
+
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; }
+.cols > * { min-width: 0; }
+ul.plain, ol.ex { margin: 0; padding-left: 1.2em; display: grid; gap: 10px; }
+ol.ex li::marker { font-family: var(--mono); color: var(--muted); }
+.ex b { font-weight: 600; }
+
+.gotchas { display: grid; gap: 12px; }
+.gotcha { border-left: 3px solid var(--line); padding: 2px 0 2px 14px; display: grid; gap: 4px; }
+.gotcha code { overflow-wrap: anywhere; }
+footer { color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="hero">
+  <span class="eyebrow">Lab · kind + podman + Kamaji</span>
+  <h1>Hosted Control Planes on a laptop</h1>
+  <p class="lede">A management cluster runs the control planes of other clusters as pods, and separate workers talk only to their own API through a published endpoint. It has the same shape as OpenShift HCP (ROSA HCP), built from upstream pieces so you can break it and understand it.</p>
+  <div class="facts">
+    <span><b>1</b> management cluster</span>
+    <span><b>2</b> hosted clusters</span>
+    <span><b>1</b> worker per NodePool</span>
+    <span><b>~3.3 GB</b> of RAM in total</span>
+  </div>
+</header>
+
+<section>
+  <div class="prose" style="display:grid;gap:12px">
+    <span class="eyebrow">Architecture</span>
+    <h2>What runs where, and how the pieces talk</h2>
+  </div>
+  <div class="key"><span class="k-cp">Management cluster and hosted control planes</span><span class="k-dp">Data plane (NodePools)</span></div>
+  <figure>
+    <div class="diagram">
+      <svg viewBox="0 0 960 620" role="img" aria-label="The management cluster hcp-mgmt hosts, in namespaces clusters-tenant-a and clusters-tenant-b, one control plane pod and one etcd per cluster, published through a LoadBalancer Service. Each tenant's workers live outside the management cluster, connect to the API on port 6443 and open a konnectivity tunnel on port 8132.">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="arr-cp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--cp)"/>
+          </marker>
+        </defs>
+
+        <g font-family="Red Hat Text, Arial, sans-serif" font-size="12" fill="currentColor">
+
+          <!-- Your machine -->
+          <rect x="40" y="20" width="175" height="50" rx="6" fill="var(--surface)" stroke="currentColor" stroke-width="1.2"/>
+          <text x="127.5" y="41" text-anchor="middle" font-weight="600">Your machine</text>
+          <text x="127.5" y="58" text-anchor="middle" font-family="Red Hat Mono, monospace" font-size="10.5" fill="var(--muted)">hkubectl tenant-a …</text>
+          <line x1="127.5" y1="70" x2="127.5" y2="158" stroke="currentColor" stroke-width="1.3" marker-end="url(#arr)"/>
+          <text x="136" y="92" font-family="Red Hat Mono, monospace" font-size="10.5" fill="var(--muted)">127.0.0.1:31441 → NodePort</text>
+
+          <!-- Management cluster -->
+          <rect x="20" y="100" width="920" height="310" rx="10" fill="var(--cp-soft)" stroke="var(--cp)" stroke-width="1.5"/>
+          <text x="240" y="138" font-family="Red Hat Display, Arial, sans-serif" font-size="14" font-weight="700" fill="var(--cp)">MANAGEMENT CLUSTER · kind hcp-mgmt</text>
+
+          <rect x="40" y="160" width="175" height="80" rx="6" fill="var(--surface)" stroke="var(--cp)"/>
+          <text x="127.5" y="182" text-anchor="middle" font-weight="600">hcp-mgmt-control-plane</text>
+          <text x="127.5" y="200" text-anchor="middle" fill="var(--muted)" font-size="11">Management API</text>
+          <text x="127.5" y="217" text-anchor="middle" fill="var(--muted)" font-size="11">NodePorts 31441–31443</text>
+
+          <rect x="40" y="255" width="175" height="60" rx="6" fill="var(--surface)" stroke="var(--cp)"/>
+          <text x="127.5" y="278" text-anchor="middle" font-weight="600">Kamaji</text>
+          <text x="127.5" y="296" text-anchor="middle" fill="var(--muted)" font-size="11">≈ HyperShift operator</text>
+          <line x1="215" y1="285" x2="253" y2="285" stroke="var(--cp)" stroke-width="1.3" marker-end="url(#arr-cp)"/>
+
+          <rect x="40" y="330" width="175" height="55" rx="6" fill="var(--surface)" stroke="var(--cp)"/>
+          <text x="127.5" y="352" text-anchor="middle" font-weight="600">MetalLB</text>
+          <text x="127.5" y="370" text-anchor="middle" fill="var(--muted)" font-size="11">IPs 10.89.0.200–250</text>
+
+          <!-- ns clusters-tenant-a -->
+          <rect x="240" y="160" width="330" height="225" rx="8" fill="none" stroke="var(--cp)" stroke-dasharray="5 4"/>
+          <text x="255" y="180" font-family="Red Hat Mono, monospace" font-size="11.5" font-weight="500" fill="var(--cp)">ns clusters-tenant-a</text>
+          <rect x="255" y="190" width="300" height="100" rx="6" fill="var(--surface)" stroke="var(--cp)"/>
+          <text x="267" y="208" font-weight="600" font-size="11.5">Control plane pod (Deployment)</text>
+          <g font-family="Red Hat Mono, monospace" font-size="10.5" text-anchor="middle">
+            <rect x="267" y="218" width="135" height="28" rx="4" fill="var(--cp-soft)" stroke="var(--cp)" stroke-width=".8"/>
+            <text x="334.5" y="236">kube-apiserver</text>
+            <rect x="410" y="218" width="135" height="28" rx="4" fill="var(--cp-soft)" stroke="var(--cp)" stroke-width=".8"/>
+            <text x="477.5" y="236">controller-manager</text>
+            <rect x="267" y="252" width="135" height="28" rx="4" fill="var(--cp-soft)" stroke="var(--cp)" stroke-width=".8"/>
+            <text x="334.5" y="270">scheduler</text>
+            <rect x="410" y="252" width="135" height="28" rx="4" fill="var(--cp-soft)" stroke="var(--cp)" stroke-width=".8"/>
+            <text x="477.5" y="270">konnectivity-server</text>
+          </g>
+          <rect x="255" y="302" width="140" height="40" rx="6" fill="var(--surface)" stroke="var(--cp)"/>
+          <text x="325" y="318" text-anchor="middle" font-weight="600" font-size="11.5">dedicated etcd</text>
+          <text x="325" y="333" text-anchor="middle" fill="var(--muted)" font-size="10.5">StatefulSet + PVC</text>
+          <rect x="410" y="302" width="145" height="40" rx="6" fill="var(--surface)" stroke="var(--cp)"/>
+          <text x="482.5" y="318" text-anchor="middle" font-weight="600" font-size="11.5">Svc LoadBalancer</text>
+          <text x="482.5" y="333" text-anchor="middle" font-family="Red Hat Mono, monospace" fill="var(--muted)" font-size="10">10.89.0.200</text>
+          <text x="255" y="370" fill="var(--muted)" font-size="10.5">runs on hcp-mgmt-worker2 · v1.35</text>
+
+          <!-- ns clusters-tenant-b -->
+          <rect x="590" y="160" width="330" height="225" rx="8" fill="none" stroke="var(--cp)" stroke-dasharray="5 4"/>
+          <text x="605" y="180" font-family="Red Hat Mono, monospace" font-size="11.5" font-weight="500" fill="var(--cp)">ns clusters-tenant-b</text>
+          <rect x="605" y="190" width="300" height="100" rx="6" fill="var(--surface)" stroke="var(--cp)"/>
+          <text x="617" y="208" font-weight="600" font-size="11.5">Control plane pod (Deployment)</text>
+          <g font-family="Red Hat Mono, monospace" font-size="10.5" text-anchor="middle">
+            <rect x="617" y="218" width="135" height="28" rx="4" fill="var(--cp-soft)" stroke="var(--cp)" stroke-width=".8"/>
+            <text x="684.5" y="236">kube-apiserver</text>
+            <rect x="760" y="218" width="135" height="28" rx="4" fill="var(--cp-soft)" stroke="var(--cp)" stroke-width=".8"/>
+            <text x="827.5" y="236">controller-manager</text>
+            <rect x="617" y="252" width="135" height="28" rx="4" fill="var(--cp-soft)" stroke="var(--cp)" stroke-width=".8"/>
+            <text x="684.5" y="270">scheduler</text>
+            <rect x="760" y="252" width="135" height="28" rx="4" fill="var(--cp-soft)" stroke="var(--cp)" stroke-width=".8"/>
+            <text x="827.5" y="270">konnectivity-server</text>
+          </g>
+          <rect x="605" y="302" width="140" height="40" rx="6" fill="var(--surface)" stroke="var(--cp)"/>
+          <text x="675" y="318" text-anchor="middle" font-weight="600" font-size="11.5">dedicated etcd</text>
+          <text x="675" y="333" text-anchor="middle" fill="var(--muted)" font-size="10.5">StatefulSet + PVC</text>
+          <rect x="760" y="302" width="145" height="40" rx="6" fill="var(--surface)" stroke="var(--cp)"/>
+          <text x="832.5" y="318" text-anchor="middle" font-weight="600" font-size="11.5">Svc LoadBalancer</text>
+          <text x="832.5" y="333" text-anchor="middle" font-family="Red Hat Mono, monospace" fill="var(--muted)" font-size="10">10.89.0.201</text>
+          <text x="605" y="370" fill="var(--muted)" font-size="10.5">runs on hcp-mgmt-worker · v1.36</text>
+
+          <!-- Data plane -->
+          <text x="40" y="490" font-family="Red Hat Display, Arial, sans-serif" font-size="14" font-weight="700" fill="var(--dp)">DATA PLANE</text>
+          <text x="40" y="510" fill="var(--muted)" font-size="11">outside the management cluster</text>
+          <text x="40" y="526" fill="var(--muted)" font-size="11">podman kind network</text>
+          <text x="40" y="542" font-family="Red Hat Mono, monospace" fill="var(--muted)" font-size="10.5">10.89.0.0/24</text>
+
+          <!-- tenant-a worker -->
+          <rect x="240" y="470" width="330" height="125" rx="8" fill="var(--dp-soft)" stroke="var(--dp)" stroke-width="1.5"/>
+          <text x="255" y="490" font-weight="600" font-size="11.5">tenant-a-worker-1</text>
+          <text x="555" y="490" text-anchor="end" font-family="Red Hat Mono, monospace" fill="var(--dp)" font-size="10">NodePool tenant-a-workers</text>
+          <g font-family="Red Hat Mono, monospace" font-size="10.5" text-anchor="middle">
+            <rect x="255" y="502" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="303" y="519">kubelet</text>
+            <rect x="357" y="502" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="405" y="519">kube-proxy</text>
+            <rect x="459" y="502" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="507" y="519">konn. agent</text>
+            <rect x="255" y="534" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="303" y="551">kindnet</text>
+            <rect x="357" y="534" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="405" y="551">CoreDNS</text>
+            <rect x="459" y="534" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="507" y="551">your apps</text>
+          </g>
+          <text x="255" y="582" fill="var(--muted)" font-size="10.5">kindest/node container · kubelet v1.35</text>
+
+          <!-- tenant-b worker -->
+          <rect x="590" y="470" width="330" height="125" rx="8" fill="var(--dp-soft)" stroke="var(--dp)" stroke-width="1.5"/>
+          <text x="605" y="490" font-weight="600" font-size="11.5">tenant-b-worker-1</text>
+          <text x="905" y="490" text-anchor="end" font-family="Red Hat Mono, monospace" fill="var(--dp)" font-size="10">NodePool tenant-b-workers</text>
+          <g font-family="Red Hat Mono, monospace" font-size="10.5" text-anchor="middle">
+            <rect x="605" y="502" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="653" y="519">kubelet</text>
+            <rect x="707" y="502" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="755" y="519">kube-proxy</text>
+            <rect x="809" y="502" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="857" y="519">konn. agent</text>
+            <rect x="605" y="534" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="653" y="551">kindnet</text>
+            <rect x="707" y="534" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="755" y="551">CoreDNS</text>
+            <rect x="809" y="534" width="96" height="26" rx="4" fill="var(--surface)" stroke="var(--dp)" stroke-width=".8"/><text x="857" y="551">your apps</text>
+          </g>
+          <text x="605" y="582" fill="var(--muted)" font-size="10.5">kindest/node container · kubelet v1.36</text>
+
+          <!-- Data plane -> control plane connections -->
+          <g font-family="Red Hat Mono, monospace" font-size="10.5">
+            <line x1="440" y1="470" x2="440" y2="345" stroke="currentColor" stroke-width="1.4" marker-end="url(#arr)"/>
+            <text x="434" y="445" text-anchor="end">kubelet → :6443</text>
+            <line x1="525" y1="470" x2="525" y2="345" stroke="var(--cp)" stroke-width="1.4" stroke-dasharray="5 3" marker-start="url(#arr-cp)" marker-end="url(#arr-cp)"/>
+            <text x="531" y="438" fill="var(--cp)">tunnel :8132</text>
+            <text x="531" y="452" fill="var(--muted)">logs · exec</text>
+
+            <line x1="790" y1="470" x2="790" y2="345" stroke="currentColor" stroke-width="1.4" marker-end="url(#arr)"/>
+            <text x="784" y="445" text-anchor="end">kubelet → :6443</text>
+            <line x1="875" y1="470" x2="875" y2="345" stroke="var(--cp)" stroke-width="1.4" stroke-dasharray="5 3" marker-start="url(#arr-cp)" marker-end="url(#arr-cp)"/>
+            <text x="869" y="438" text-anchor="end" fill="var(--cp)">tunnel :8132</text>
+          </g>
+        </g>
+      </svg>
+    </div>
+    <figcaption>Each hosted cluster lives in its own <code>clusters-&lt;name&gt;</code> namespace on the management cluster, with its own etcd. The workers are not management cluster nodes: they join the tenant's API through the LoadBalancer IP. The konnectivity-agent opens the tunnel from the worker, and <code>kubectl logs</code>, <code>exec</code> and <code>port-forward</code> travel back down that same tunnel. From your machine, each tenant's API is published on a fixed NodePort.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="prose" style="display:grid;gap:12px">
+    <span class="eyebrow">Mapping</span>
+    <h2>What you are looking at, translated to HCP</h2>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>OpenShift HCP / HyperShift</th><th>In this lab</th></tr></thead>
+      <tbody>
+        <tr><td>Management cluster</td><td>kind cluster <code>hcp-mgmt</code></td></tr>
+        <tr><td>Nodes for control planes (label <code>hypershift.openshift.io/control-plane</code>)</td><td><code>hcp-mgmt-worker</code> and <code>hcp-mgmt-worker2</code>, with the same label</td></tr>
+        <tr><td>HyperShift operator</td><td>Kamaji, in <code>kamaji-system</code></td></tr>
+        <tr><td><code>HostedCluster</code> + <code>HostedControlPlane</code></td><td><code>TenantControlPlane</code> (<code>kubectl get tcp -A</code>)</td></tr>
+        <tr><td>Namespace <code>clusters-&lt;name&gt;</code></td><td>Namespace <code>clusters-&lt;name&gt;</code></td></tr>
+        <tr><td>etcd por hosted cluster</td><td>dedicated etcd por tenant (chart kamaji-etcd)</td></tr>
+        <tr><td>API publishing (NLB / Route)</td><td><code>LoadBalancer</code> Service via MetalLB</td></tr>
+        <tr><td>Konnectivity</td><td>konnectivity-server in the control plane pod, agent as a DaemonSet in the tenant</td></tr>
+        <tr><td><code>NodePool</code></td><td><code>04-nodepool.sh</code>: <code>kindest/node</code> containers</td></tr>
+        <tr><td>Ignition / node bootstrap</td><td><code>kubeadm join</code> with a 15-minute token</td></tr>
+        <tr><td>Control plane upgrade (<code>spec.release</code>)</td><td><code>spec.kubernetes.version</code> on the TCP</td></tr>
+        <tr><td>NodePool upgrade (<code>upgradeType: Replace</code>)</td><td>Rolling replacement, one node at a time</td></tr>
+        <tr><td>OVN-Kubernetes</td><td>kindnet</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="prose" style="display:grid;gap:12px">
+    <span class="eyebrow">Upgrades</span>
+    <h2>The control plane and the workers upgrade separately</h2>
+    <p>Same as HCP: first you bump the control plane version, which only restarts pods on the management cluster. The workers stay on the previous version until you upgrade their NodePool.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <h3>Start</h3>
+      <dl class="ver"><dt>control plane</dt><dd class="cpv">v1.35.8</dd><dt>workers</dt><dd class="dpv">v1.35.8</dd></dl>
+    </div>
+    <div class="step">
+      <h3>1 · Control plane</h3>
+      <dl class="ver"><dt>control plane</dt><dd class="cpv">v1.36.4</dd><dt>workers</dt><dd class="dpv">v1.35.8</dd></dl>
+      <span class="cmd">kubectl patch tcp … version v1.36.4</span>
+    </div>
+    <div class="step">
+      <h3>2 · NodePool</h3>
+      <dl class="ver"><dt>control plane</dt><dd class="cpv">v1.36.4</dd><dt>workers</dt><dd class="dpv">v1.36.4</dd></dl>
+      <span class="cmd">04-nodepool.sh tenant-b 1 v1.36.4</span>
+    </div>
+    <div class="step blocked">
+      <h3>Rejected</h3>
+      <dl class="ver"><dt>control plane</dt><dd class="cpv">v1.35.8</dd><dt>workers</dt><dd class="dpv">v1.36.4</dd></dl>
+      <span class="cmd">workers newer than the control plane break the version skew policy</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="prose" style="display:grid;gap:12px">
+    <span class="eyebrow">Get started</span>
+    <h2>Up and running in about 5 minutes</h2>
+    <p>You need podman (or docker) with a 6 CPU, 10–12 GB VM, kind 0.33 or later, helm and python3. The lab downloads its own kubectl and uses its own kubeconfigs, so it never touches <code>~/.kube/config</code>.</p>
+  </div>
+  <pre>git clone https://github.com/mcipamo/hcp-kind-lab.git && cd hcp-kind-lab
+
+<span class="c"># once, if the VM is too small</span>
+podman machine stop && podman machine set --cpus 6 --memory 12288 && podman machine start
+
+./scripts/01-mgmt-cluster.sh               <span class="c"># management cluster</span>
+./scripts/02-addons.sh                     <span class="c"># cert-manager, MetalLB, Kamaji</span>
+./scripts/03-hosted-cluster.sh tenant-a 1  <span class="c"># hosted cluster in slot 1 → 127.0.0.1:31441</span>
+./scripts/04-nodepool.sh tenant-a 1        <span class="c"># one worker in its data plane</span>
+./scripts/status.sh                        <span class="c"># overview</span>
+
+source env.sh
+kubectl get tcp -A                         <span class="c"># control planes, seen from the management cluster</span>
+hkubectl tenant-a get nodes                <span class="c"># inside the hosted cluster</span></pre>
+</section>
+
+<section>
+  <div class="cols">
+    <div style="display:grid;gap:14px">
+      <span class="eyebrow">Practice</span>
+      <h2>Exercises</h2>
+      <ol class="ex">
+        <li><b>The tenant cannot see its control plane.</b> <code>hkubectl tenant-a get pods -n kube-system</code> shows no apiserver and no etcd.</li>
+        <li><b>No konnectivity, no logs.</b> Delete the <code>konnectivity-agent</code> DaemonSet and try <code>logs</code>: <code>No agent available</code>. Kamaji brings it back in about 10 seconds.</li>
+        <li><b>The control plane goes down, the apps keep running.</b> Scale the tenant's Deployment to 0 and check <code>crictl ps</code> on the worker.</li>
+        <li><b>Control plane HA.</b> Set <code>replicas</code> to 2 and watch them spread across both management nodes.</li>
+        <li><b>Two-phase upgrade.</b> The TCP first, then the NodePool.</li>
+        <li><b>Scale the NodePool.</b> <code>04-nodepool.sh tenant-a 3</code> and back to 1, drain included.</li>
+        <li><b>Lose a management cluster node.</b> <code>podman stop hcp-mgmt-worker2</code>: which control plane goes down? What about its etcd on a local PVC?</li>
+      </ol>
+    </div>
+    <div style="display:grid;gap:14px;align-content:start">
+      <span class="eyebrow">Keep in mind</span>
+      <h2>Differences from real HCP</h2>
+      <ul class="plain">
+        <li>No OpenShift components: no openshift-apiserver, oauth, CVO or Routes. It is upstream Kubernetes with the same topology.</li>
+        <li>HCP runs each component as its own Deployment. Kamaji packs apiserver, controller-manager, scheduler and konnectivity-server into one pod with 4 containers.</li>
+        <li>Workers are not in another account or VPC: they share the <code>kind</code> network with the management cluster.</li>
+        <li>There is no NodePool CRD: a script plays the controller.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="prose" style="display:grid;gap:12px">
+    <span class="eyebrow">What broke while building it</span>
+    <h2>Three problems you will run into</h2>
+  </div>
+  <div class="gotchas">
+    <div class="gotcha">
+      <h3>kube-proxy: <code>nf_conntrack_max: permission denied</code></h3>
+      <p>kube-proxy rewrites the value whenever it is not exactly 32768 × CPUs, and inside a container it is not allowed to. <code>01-mgmt-cluster.sh</code> sets that exact value on the container host. Re-run it after restarting the VM or changing its CPUs.</p>
+    </div>
+    <div class="gotcha">
+      <h3>Pods stuck in <code>ContainerCreating</code> with flannel</h3>
+      <p>flannel delegates to the <code>bridge</code> CNI plugin, and kindest/node images do not ship it. That is why the lab uses kindnet, which comes inside the image itself.</p>
+    </div>
+    <div class="gotcha">
+      <h3><code>logs</code> and <code>exec</code>: <code>No agent available</code></h3>
+      <p>The konnectivity-agent is not running, almost always because pod networking is broken. Since <code>kubectl logs</code> does not work either, debug from the node: <code>podman exec &lt;worker&gt; crictl logs …</code>.</p>
+    </div>
+  </div>
+</section>
+
+<footer>Scripts, README and the <code>oc</code> guide: <a href="https://github.com/mcipamo/hcp-kind-lab">github.com/mcipamo/hcp-kind-lab</a><br>Kubernetes v1.35 / v1.36 · kind v0.33 · Kamaji (edge) · podman 5.4 on Apple Silicon. October 2026.</footer>
+
+</div>
+</body>
+</html>
