@@ -1,0 +1,22 @@
+# Management cluster: 1 control-plane node + 2 nodes dedicated to hosting control planes.
+# The CIDRs mimic OpenShift defaults (10.128.0.0/14 pods, 172.30.0.0/16 services) so they
+# never overlap with the hosted clusters' ranges (10.244.0.0/16 / 10.96.0.0/16).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  podSubnet: 10.128.0.0/14
+  serviceSubnet: 172.30.0.0/16
+nodes:
+  - role: control-plane
+    # Each hosted cluster's API is published to your machine on a fixed NodePort (slots 1..3),
+    # so you can use kubectl/oc without port-forwards that drop.
+    extraPortMappings:
+      - { containerPort: 31441, hostPort: 31441, listenAddress: "127.0.0.1" }
+      - { containerPort: 31442, hostPort: 31442, listenAddress: "127.0.0.1" }
+      - { containerPort: 31443, hostPort: 31443, listenAddress: "127.0.0.1" }
+  - role: worker
+    labels:
+      hypershift.openshift.io/control-plane: "true"
+  - role: worker
+    labels:
+      hypershift.openshift.io/control-plane: "true"
